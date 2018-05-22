@@ -1,0 +1,146 @@
+#!/usr/bin/python
+import argparse
+import sys
+
+import urllib
+import urllib2
+import json
+import os
+
+from datetime import datetime
+
+
+try:
+    user = os.environ['GITHUB_USER']  # change .bash_profile, export GITHUB_USER=email
+    user_name = os.environ['GITHUB_USER_NAME']  # change .bash_profile, export GITHUB_USER_NAME=UserNameExample
+    token = os.environ['GITHUB_TOKEN']  # change .bash_profile, export GITHUB_TOKEN=token
+except KeyError:
+    print("Please, set the environment variables GITHUB_USER, GITHUB_USER_NAME and GITHUB_TOKEN.")
+    sys.exit(1)
+
+
+def create_headers():
+    return {'Authorization': 'token %s' % token}
+
+
+def get(url, params):
+    headers = create_headers()
+    return api_call(headers, Methods.GET, url, params)
+
+
+def post(url, params):
+    headers = create_headers()
+    headers['Content-Type'] = 'application/json'
+    return api_call(headers, Methods.POST, url, params)
+
+
+def delete(url, params):
+    headers = create_headers()
+    return api_call(headers, Methods.DELETE, url, params)
+
+
+def patch(url, params):
+    headers = create_headers()
+    headers['Content-Type'] = 'application/json'
+    return api_call(headers, Methods.PATCH, url, params)
+
+
+def api_call(headers, method, url, params):
+    data = json.dumps(params)
+    req = urllib2.Request(url, data, headers)
+    req.get_method = lambda: method
+    q = urllib2.urlopen(req)
+    return collect_response_data(q.read(), q.getcode())
+
+
+def collect_response_data(resp, status_code):
+    result = {'status_code': status_code}
+    if not resp == '':
+        result['response_data'] = json.loads(resp)
+    return result
+
+
+class Methods:
+    POST = "POST"
+    GET = "GET"
+    DELETE = "DELETE"
+    PATCH = "PATCH"
+
+
+class URLs:
+    GITHUB = "https://api.github.com/"
+    REPOS = GITHUB + "user/repos"
+    REPOS_EXT = GITHUB + "repos/{}/{}"  # first parameter = owner, second = repo name
+    LIST_COMMITS = GITHUB + "repos/{}/{}/commits"  # first parameter = owner, second = repo name
+    LIST_BRANCHES = GITHUB + "repos/{}/{}/branches"  # first parameter = owner, second = repo name
+
+
+def group_params():
+    return {
+        "name": args.repo,
+        "private": args.private,
+        "description": args.description or "",
+        "license_template": args.license or "",
+        "has_issues": args.has_issues,
+        "has_wiki": args.has_wiki
+    }
+
+
+def normalize_for_print(params):
+    return unicode(", ".join(map(str, params)))
+
+
+parser = argparse.ArgumentParser()
+commands = parser.add_mutually_exclusive_group()
+commands.add_argument("-lr", "--list-repos", help="list repositories", action="store_true")
+commands.add_argument("-nr", "--new-repo", help="new repository", action="store_true")
+commands.add_argument("-dr", "--delete-repo", help="delete repository", action="store_true")
+commands.add_argument("-er", "--edit-repo", help="edit repository", action="store_true")
+commands.add_argument("-lc", "--list-commits", help="list commits", action="store_true")
+commands.add_argument("-lb", "--list-branches", help="list repo branches", action="store_true")
+
+parser.add_argument("-r", "--repo", help="repository name")
+parser.add_argument("-p", "--private", help="private repository", action="store_true", default=False)
+parser.add_argument("-d", "--description", help="repository description")
+parser.add_argument("-l", "--license", help="repository licence")
+parser.add_argument("-w", "--has-wiki", help="enable repository wiki", action="store_true", default=False)
+parser.add_argument("-i", "--has-issues", help="enable repository issues", action="store_true", default=False)
+parser.add_argument("--since", help="since date; format: YYYY-MM-DDTHH:MM:SSZ", action="store_true", default=False)
+parser.add_argument("--until", help="until date; format: YYYY-MM-DDTHH:MM:SSZ", action="store_true", default=False)
+parser.add_argument("--sha", help="SHA or branch to start listing commits from; usually: master", action="store_true", default=False)
+
+args = parser.parse_args()
+
+if args.new_repo:
+    response = post(URLs.REPOS, group_params())
+    if response.get('status_code') == 201:
+        print("Repo url: https://github.com/{}/{}".format(user_name, args.repo))
+        print("Add remote: git remote add origin https://github.com/{}/{}.git".format(user_name, args.repo))
+    else:
+        print("Occurred an error trying to create a repo.\nResponse: " + response.get('response_data'))
+elif args.list_repos:
+    response = get(URLs.REPOS, {"visibility": "all"})
+    for item in response.get('response_data'):
+        print normalize_for_print([item["name"], "PRIVATE" if item["private"] else "PUBLIC", item["html_url"]])
+elif args.delete_repo:
+    response = delete(URLs.REPOS_EXT.format(user_name, args.repo), {})
+    if response.get('status_code') == 204:
+        print("The repository \"{}\" was successfully deleted.".format(args.repo))
+elif args.edit_repo:
+    response = patch(URLs.REPOS_EXT.format(user_name, args.repo), group_params())
+    if response.get('status_code') == 200:
+        print("The repository \"{}\" was successfully edited.".format(args.repo))
+    else:
+        print unicode(response.get('response_data').get('message'))
+elif args.list_commits:
+    response = get(URLs.LIST_COMMITS.format(user_name, args.repo), {})
+    if response.get('status_code') == 200:
+        for item in response.get('response_data'):
+            dt_obj = datetime.strptime(item['commit']['committer']['date'], '%Y-%m-%dT%H:%M:%SZ')
+            print normalize_for_print([item["sha"][:7], item['commit']['committer']['name'], item['commit']['message'], dt_obj.strftime('%Y-%m-%d %H:%M')])
+elif args.list_branches:
+    response = get(URLs.LIST_BRANCHES.format(user_name, args.repo), {})
+    if response.get('status_code') == 200:
+        for item in response.get('response_data'):
+            print normalize_for_print([item['name'], item['commit']['sha'][:7]])
+
