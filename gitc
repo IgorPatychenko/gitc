@@ -75,7 +75,7 @@ def pretty_print(arr_data, headers=[]):
             val = row[i]
             div_l = len(val)
             spaces = " " * ((len(column_parts[i]) - div_l) / 2)
-            row_to_print += spaces + val + (" " * (len(column_parts[i]) - len(spaces) - div_l)) + "|"
+            row_to_print += (" " * (len(column_parts[i]) - len(spaces) - div_l)) + val + spaces + "|"
         print(row_to_print)
         print(line)
 
