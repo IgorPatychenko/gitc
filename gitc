@@ -65,23 +65,19 @@ def pretty_print(arr_data, headers=[]):
     if len(headers) > 0:
         result.append(headers)
     result = [[str(element) for element in arr] for arr in arr_data]
-    column_parts = ["-" * (len(max(get_column(result, i), key=len)) + min_padding_left_right) for i in range(0, len(result[0]))]
+    col_lengths = ["-" * (max([len(row[i]) for row in result]) + min_padding_left_right) for i in range(0, len(result[0]))]
 
-    line = "+{0}+".format("+".join(column_parts))
+    line = "+{0}+".format("+".join(col_lengths))
     print(line)
     for row in result:
         row_to_print = "|"
         for i in range(0, len(row)):
             val = row[i]
             div_l = len(val)
-            spaces = " " * ((len(column_parts[i]) - div_l) / 2)
-            row_to_print += (" " * (len(column_parts[i]) - len(spaces) - div_l)) + val + spaces + "|"
+            spaces = " " * ((len(col_lengths[i]) - div_l) / 2)
+            row_to_print += (" " * (len(col_lengths[i]) - len(spaces) - div_l)) + val + spaces + "|"
         print(row_to_print)
         print(line)
-
-
-def get_column(matrix, i):
-    return [row[i] for row in matrix]
 
 
 def get_max_length_of_col(col):
