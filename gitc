@@ -48,6 +48,7 @@ def api_call(headers, method, url, params):
     data = json.dumps(params)
     req = urllib2.Request(url, data, headers)
     req.get_method = lambda: method
+    # TODO Fix the crush if the repo is empty (urllib2.HTTPError: HTTP Error 409: Conflict)
     q = urllib2.urlopen(req)
     return collect_response_data(q.read(), q.getcode())
 
@@ -78,13 +79,6 @@ def pretty_print(arr_data, headers=[]):
             row_to_print += (" " * (len(col_lengths[i]) - len(spaces) - div_l)) + val + spaces + "|"
         print(row_to_print)
         print(line)
-
-
-def get_max_length_of_col(col):
-    max_len = 0
-    for entry in col:
-        max_len = len(entry) if len(entry) > max_len else max_len
-    return max_len
 
 
 class Methods:
