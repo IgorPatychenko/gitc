@@ -2,6 +2,7 @@
 import argparse
 import sys
 
+import urllib
 import urllib2
 import json
 import os
@@ -46,7 +47,13 @@ def patch(url, params):
 
 def api_call(headers, method, url, params):
     data = json.dumps(params)
-    req = urllib2.Request(url, data, headers)
+    if method != Methods.GET:
+        req = urllib2.Request(url, data, headers)
+    elif len(params.keys()):
+        get_params = urllib.urlencode(dict(params))
+        req = urllib2.Request("%s?%s" % (url, get_params), None, headers)
+    else:
+        req = urllib2.Request(url, None, headers)
     req.get_method = lambda: method
     # TODO Fix the crush if the repo is empty (urllib2.HTTPError: HTTP Error 409: Conflict)
     q = urllib2.urlopen(req)
@@ -60,7 +67,9 @@ def collect_response_data(resp, status_code):
     return result
 
 
-def pretty_print(arr_data, headers=[]):
+def pretty_print(arr_data, headers=None):
+    if headers is None:
+        headers = []
     min_total_padding = 2
     result = []
     if len(headers) > 0:
@@ -83,6 +92,9 @@ def pretty_print(arr_data, headers=[]):
 
 
 class Methods:
+    def __init__(self):
+        pass
+
     POST = "POST"
     GET = "GET"
     DELETE = "DELETE"
@@ -90,6 +102,9 @@ class Methods:
 
 
 class URLs:
+    def __init__(self):
+        pass
+
     GITHUB = "https://api.github.com/"
     REPOS = GITHUB + "user/repos"
     REPOS_EXT = GITHUB + "repos/{}/{}"  # first parameter = owner, second = repo name
@@ -127,8 +142,8 @@ parser.add_argument("-d", "--description", help="repository description")
 parser.add_argument("-l", "--license", help="repository licence")
 parser.add_argument("-w", "--has-wiki", help="enable repository wiki", action="store_true", default=False)
 parser.add_argument("-i", "--has-issues", help="enable repository issues", action="store_true", default=False)
-parser.add_argument("--since", help="since date; format: YYYY-MM-DDTHH:MM:SSZ", action="store_true", default=False)
-parser.add_argument("--until", help="until date; format: YYYY-MM-DDTHH:MM:SSZ", action="store_true", default=False)
+parser.add_argument("-s", "--since", help="since date; format: YYYY-MM-DDTHH:MM:SSZ", default="1970-01-01T00:00:00")
+parser.add_argument("-u", "--until", help="until date; format: YYYY-MM-DDTHH:MM:SSZ", default=False)
 parser.add_argument("--sha", help="SHA or branch to start listing commits from; usually: master", action="store_true", default=False)
 
 args = parser.parse_args()
@@ -157,7 +172,7 @@ elif args.edit_repo:
     else:
         print unicode(response.get('response_data').get('message'))
 elif args.list_commits:
-    response = get(URLs.LIST_COMMITS.format(user_name, args.repo), {})
+    response = get(URLs.LIST_COMMITS.format(user_name, args.repo), {'since': args.since, 'until': args.until})
     if response.get('status_code') == 200:
         to_print = [["SHA", "Committer name", "Message", "Date"]]
         for item in response.get('response_data'):
