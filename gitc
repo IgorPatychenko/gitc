@@ -55,9 +55,11 @@ def api_call(headers, method, url, params):
     else:
         req = urllib2.Request(url, None, headers)
     req.get_method = lambda: method
-    # TODO Fix the crush if the repo is empty (urllib2.HTTPError: HTTP Error 409: Conflict)
-    q = urllib2.urlopen(req)
-    return collect_response_data(q.read(), q.getcode())
+    try:
+        q = urllib2.urlopen(req)
+        return collect_response_data(q.read(), q.getcode())
+    except urllib2.HTTPError as e:
+        return collect_response_data(e.read(), e.code)
 
 
 def collect_response_data(resp, status_code):
@@ -107,9 +109,9 @@ class URLs:
 
     GITHUB = "https://api.github.com/"
     REPOS = GITHUB + "user/repos"
-    REPOS_EXT = GITHUB + "repos/{}/{}"  # first parameter = owner, second = repo name
-    LIST_COMMITS = GITHUB + "repos/{}/{}/commits"  # first parameter = owner, second = repo name
-    LIST_BRANCHES = GITHUB + "repos/{}/{}/branches"  # first parameter = owner, second = repo name
+    REPOS_EXT = GITHUB + "repos/%s/%s"  # first parameter = owner, second = repo name
+    LIST_COMMITS = GITHUB + "repos/%s/%s/commits"  # first parameter = owner, second = repo name
+    LIST_BRANCHES = GITHUB + "repos/%s/%s/branches"  # first parameter = owner, second = repo name
 
 
 def group_params():
@@ -151,10 +153,10 @@ args = parser.parse_args()
 if args.new_repo:
     response = post(URLs.REPOS, group_params())
     if response.get('status_code') == 201:
-        print("Repo url: https://github.com/{}/{}".format(user_name, args.repo))
-        print("Add remote: git remote add origin https://github.com/{}/{}.git".format(user_name, args.repo))
+        print "Repo url: https://github.com/%s/%s" % (user_name, args.repo)
+        print "Add remote: git remote add origin https://github.com/%s/%s.git" % (user_name, args.repo)
     else:
-        print("Occurred an error trying to create a repo.\nResponse: " + response.get('response_data'))
+        print "Occurred an error trying to create a repo.\nResponse: %s" % response.get('response_data')
 elif args.list_repos:
     response = get(URLs.REPOS, {"visibility": "all"})
     to_print = [["Name", "Visibility", "HTML URL"]]
@@ -162,25 +164,27 @@ elif args.list_repos:
         to_print.append([item["name"], "PRIVATE" if item["private"] else "PUBLIC", item["html_url"]])
     pretty_print(to_print)
 elif args.delete_repo:
-    response = delete(URLs.REPOS_EXT.format(user_name, args.repo), {})
+    response = delete(URLs.REPOS_EXT % (user_name, args.repo), {})
     if response.get('status_code') == 204:
-        print("The repository \"{}\" was successfully deleted.".format(args.repo))
+        print "The repository \"%s\" was successfully deleted." % args.repo
 elif args.edit_repo:
-    response = patch(URLs.REPOS_EXT.format(user_name, args.repo), group_params())
+    response = patch(URLs.REPOS_EXT % (user_name, args.repo), group_params())
     if response.get('status_code') == 200:
-        print("The repository \"{}\" was successfully edited.".format(args.repo))
+        print "The repository \"%s\" was successfully edited." % args.repo
     else:
         print unicode(response.get('response_data').get('message'))
 elif args.list_commits:
-    response = get(URLs.LIST_COMMITS.format(user_name, args.repo), {'since': args.since, 'until': args.until})
+    response = get(URLs.LIST_COMMITS % (user_name, args.repo), {'since': args.since, 'until': args.until})
     if response.get('status_code') == 200:
         to_print = [["SHA", "Committer name", "Message", "Date"]]
         for item in response.get('response_data'):
             dt_obj = datetime.strptime(item['commit']['committer']['date'], '%Y-%m-%dT%H:%M:%SZ').strftime('%d/%m/%Y %H:%M')
             to_print.append([item["sha"], item['commit']['committer']['name'], item['commit']['message'], dt_obj])
         pretty_print(to_print)
+    else:
+        print "Occurred and error. Response code: %s\nMessage: %s" % (response.get('status_code'), response.get('response_data').get('message'))
 elif args.list_branches:
-    response = get(URLs.LIST_BRANCHES.format(user_name, args.repo), {})
+    response = get(URLs.LIST_BRANCHES % (user_name, args.repo), {})
     if response.get('status_code') == 200:
         to_print = [["Name", "SHA"]]
         for item in response.get('response_data'):
