@@ -2,13 +2,13 @@
 import argparse
 import sys
 
+import re
 import urllib
 import urllib2
 import json
 import os
 
 from datetime import datetime
-
 
 try:
     user = os.environ['GITHUB_USER']  # change .bash_profile, export GITHUB_USER=email
@@ -23,34 +23,38 @@ def create_headers():
     return {'Authorization': 'token %s' % token}
 
 
-def get(url, params):
-    headers = create_headers()
-    return api_call(headers, Methods.GET, url, params)
-
-
-def post(url, params):
-    headers = create_headers()
+def add_content_type(headers):
     headers['Content-Type'] = 'application/json'
-    return api_call(headers, Methods.POST, url, params)
 
 
-def delete(url, params):
+def get(url, parameters):
     headers = create_headers()
-    return api_call(headers, Methods.DELETE, url, params)
+    return api_call(headers, Methods.GET, url, parameters)
 
 
-def patch(url, params):
+def post(url, parameters):
     headers = create_headers()
-    headers['Content-Type'] = 'application/json'
-    return api_call(headers, Methods.PATCH, url, params)
+    add_content_type(headers)
+    return api_call(headers, Methods.POST, url, parameters)
 
 
-def api_call(headers, method, url, params):
-    data = json.dumps(params)
+def delete(url, parameters):
+    headers = create_headers()
+    return api_call(headers, Methods.DELETE, url, parameters)
+
+
+def patch(url, parameters):
+    headers = create_headers()
+    add_content_type(headers)
+    return api_call(headers, Methods.PATCH, url, parameters)
+
+
+def api_call(headers, method, url, parameters):
+    data = json.dumps(parameters)
     if method != Methods.GET:
         req = urllib2.Request(url, data, headers)
-    elif len(params.keys()):
-        get_params = urllib.urlencode(dict(params))
+    elif len(parameters.keys()):
+        get_params = urllib.urlencode(dict(parameters))
         req = urllib2.Request("%s?%s" % (url, get_params), None, headers)
     else:
         req = urllib2.Request(url, None, headers)
@@ -77,18 +81,18 @@ def pretty_print(arr_data, headers=None):
     if len(headers) > 0:
         result.append(headers)
     result = [[str(element) for element in arr] for arr in arr_data]
-    cols = [(i, "-" * i) for i in [max([len(row_data[i]) for row_data in result]) + min_total_padding for i in range(0, len(result[0]))]]
+    cols = [(i, "-" * i) for i in
+            [max([len(row_data[i]) for row_data in result]) + min_total_padding for i in range(0, len(result[0]))]]
 
     line = "+{0}+".format("+".join([i[1] for i in cols]))
     print(line)
     for row_data in result:
         row = "|"
         for i in range(0, len(row_data)):
-            val = row_data[i]
+            val = re.sub(r"(\n)+", ". ", row_data[i])
             val_len = len(val)
             spaces = " " * ((cols[i][0] - val_len) / 2)
-            rest_of_spaces = " " * (cols[i][0] - len(spaces) - val_len)
-            row += rest_of_spaces + val + spaces + "|"
+            row += " " * (cols[i][0] - len(spaces) - val_len) + val + spaces + "|"
         print(row)
         print(line)
 
@@ -125,8 +129,8 @@ def group_params():
     }
 
 
-def normalize_for_print(params):
-    return unicode(", ".join(map(str, params)))
+def normalize_for_print(parameters):
+    return unicode(", ".join(map(str, parameters)))
 
 
 parser = argparse.ArgumentParser()
@@ -139,13 +143,14 @@ commands.add_argument("-lc", "--list-commits", help="list commits", action="stor
 commands.add_argument("-lb", "--list-branches", help="list repo branches", action="store_true")
 
 parser.add_argument("-r", "--repo", help="repository name")
+parser.add_argument("-u", "--username", help="username", default=user_name)
 parser.add_argument("-p", "--private", help="private repository", action="store_true", default=False)
 parser.add_argument("-d", "--description", help="repository description")
 parser.add_argument("-l", "--license", help="repository licence")
 parser.add_argument("-w", "--has-wiki", help="enable repository wiki", action="store_true", default=False)
 parser.add_argument("-i", "--has-issues", help="enable repository issues", action="store_true", default=False)
-parser.add_argument("-s", "--since", help="since date; format: YYYY-MM-DDTHH:MM:SSZ")
-parser.add_argument("-u", "--until", help="until date; format: YYYY-MM-DDTHH:MM:SSZ")
+parser.add_argument("--since", help="since date; format: YYYY-MM-DDTHH:MM:SSZ")
+parser.add_argument("--until", help="until date; format: YYYY-MM-DDTHH:MM:SSZ")
 parser.add_argument("--sha", help="SHA or branch to start listing commits from; usually: master", action="store_true", default=False)
 
 args = parser.parse_args()
@@ -153,8 +158,8 @@ args = parser.parse_args()
 if args.new_repo:
     response = post(URLs.REPOS, group_params())
     if response.get('status_code') == 201:
-        print "Repo url: https://github.com/%s/%s" % (user_name, args.repo)
-        print "Add remote: git remote add origin https://github.com/%s/%s.git" % (user_name, args.repo)
+        print "Repo url: https://github.com/%s/%s" % (args.username, args.repo)
+        print "Add remote: git remote add origin https://github.com/%s/%s.git" % (args.username, args.repo)
     else:
         print "Occurred an error trying to create a repo.\nResponse: %s" % response.get('response_data')
 elif args.list_repos:
@@ -164,17 +169,20 @@ elif args.list_repos:
         to_print.append([item["name"], "PRIVATE" if item["private"] else "PUBLIC", item["html_url"]])
     pretty_print(to_print)
 elif args.delete_repo:
-    response = delete(URLs.REPOS_EXT % (user_name, args.repo), {})
+    response = delete(URLs.REPOS_EXT % (args.username, args.repo), {})
     if response.get('status_code') == 204:
         print "The repository \"%s\" was successfully deleted." % args.repo
 elif args.edit_repo:
-    response = patch(URLs.REPOS_EXT % (user_name, args.repo), group_params())
+    response = patch(URLs.REPOS_EXT % (args.username, args.repo), group_params())
     if response.get('status_code') == 200:
         print "The repository \"%s\" was successfully edited." % args.repo
     else:
         print unicode(response.get('response_data').get('message'))
 elif args.list_commits:
-    response = get(URLs.LIST_COMMITS % (user_name, args.repo), {'since': args.since, 'until': args.until})
+    params = {}
+    if args.since is not None and args.until is not None:
+        params['since', 'until'] = args.since, args.until
+    response = get(URLs.LIST_COMMITS % (args.username, args.repo), params)
     if response.get('status_code') == 200:
         to_print = [["SHA", "Committer name", "Message", "Date"]]
         for item in response.get('response_data'):
@@ -184,7 +192,7 @@ elif args.list_commits:
     else:
         print "Occurred and error. Response code: %s\nMessage: %s" % (response.get('status_code'), response.get('response_data').get('message'))
 elif args.list_branches:
-    response = get(URLs.LIST_BRANCHES % (user_name, args.repo), {})
+    response = get(URLs.LIST_BRANCHES % (args.username, args.repo), {})
     if response.get('status_code') == 200:
         to_print = [["Name", "SHA"]]
         for item in response.get('response_data'):
