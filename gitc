@@ -115,6 +115,7 @@ class URLs:
     REPOS_EXT = GITHUB + "repos/%s/%s"  # first parameter = owner, second = repo name
     LIST_COMMITS = GITHUB + "repos/%s/%s/commits"  # first parameter = owner, second = repo name
     LIST_BRANCHES = GITHUB + "repos/%s/%s/branches"  # first parameter = owner, second = repo name
+    FORKS = GITHUB + "repos/%s/%s/forks"
 
 
 def group_params():
@@ -142,6 +143,7 @@ commands.add_argument("-lc", "--list-commits", help="list commits", action="stor
 commands.add_argument("-lb", "--list-branches", help="list repo branches", action="store_true")
 
 parser.add_argument("-r", "--repo", help="repository name")
+parser.add_argument("-f", "--forks", help="repository forks", action="store_true")
 parser.add_argument("-u", "--username", help="username", default=user_name)
 parser.add_argument("-p", "--private", help="private repository", action="store_true", default=False)
 parser.add_argument("-d", "--description", help="repository description")
@@ -196,4 +198,11 @@ elif args.list_branches:
         to_print = [["Name", "SHA"]]
         for item in response.get('response_data'):
             to_print.append([item['name'], item['commit']['sha']])
+        pretty_print(to_print)
+elif args.forks:
+    response = get(URLs.FORKS % (args.username, args.repo), {})
+    if response.get('status_code') == 200:
+        to_print = [["Owner", "HTML URL"]]
+        for item in response.get('response_data'):
+            to_print.append([item['owner']['login'], item['html_url']])
         pretty_print(to_print)
