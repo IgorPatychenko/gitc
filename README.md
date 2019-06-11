@@ -1,4 +1,8 @@
 # gitc
+
+*ks ks ks ks ks 
+*KS KS KS KS
+
 Github shell commands
 
 For start using the scripts make sure you added 3 environment variables.
